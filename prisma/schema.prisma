@@ -1,0 +1,638 @@
+// schema.prisma — Sistema de Gestão de Obras (SaaS Multi-Tenant)
+// Banco: PostgreSQL via Supabase
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// TENANT (Construtora)
+// ============================================================
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  cnpj      String?  @unique
+  email     String   @unique
+  phone     String?
+  logoUrl   String?
+  address   Json?    // { street, city, state, zip }
+  planId    String
+  plan      Plan     @relation(fields: [planId], references: [id])
+  stripeCustomerId     String? @unique
+  stripeSubscriptionId String? @unique
+  trialEndsAt          DateTime?
+  subscriptionStatus   SubscriptionStatus @default(TRIAL)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  users        User[]
+  obras        Obra[]
+  clientes     Cliente[]
+  fornecedores Fornecedor[]
+  categorias   Categoria[]
+
+  @@map("tenants")
+}
+
+// ============================================================
+// PLANOS E ASSINATURAS
+// ============================================================
+
+model Plan {
+  id              String  @id @default(cuid())
+  name            String  // "Starter", "Pro", "Enterprise"
+  slug            String  @unique // "starter", "pro", "enterprise"
+  priceMonthly    Float
+  maxObras        Int?    // null = ilimitado
+  maxUsers        Int?    // null = ilimitado
+  maxStorageGb    Int?
+  stripePriceId   String  @unique
+  isActive        Boolean @default(true)
+  features        Json    // lista de features incluídas
+
+  tenants Tenant[]
+
+  @@map("plans")
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  PAUSED
+}
+
+// ============================================================
+// USUÁRIOS E AUTENTICAÇÃO
+// ============================================================
+
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  authId    String   @unique  // Supabase Auth UID
+  name      String
+  email     String
+  role      UserRole @default(VIEWER)
+  avatarUrl String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relações
+  obrasGerenciadas Obra[]   @relation("ObraGestor")
+  rdo              Rdo[]
+  notasLancadas    NotaFiscal[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+enum UserRole {
+  ADMIN         // Acesso total + billing
+  GESTOR        // Gerencia obras e financeiro
+  MESTRE_OBRA   // Acesso a RDO e estoque
+  VIEWER        // Apenas leitura
+}
+
+// ============================================================
+// OBRA
+// ============================================================
+
+model Obra {
+  id          String      @id @default(cuid())
+  tenantId    String
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  gestorId    String?
+  gestor      User?       @relation("ObraGestor", fields: [gestorId], references: [id])
+  clienteId   String?
+  cliente     Cliente?    @relation(fields: [clienteId], references: [id])
+  name        String
+  code        String?     // Código interno (ex: OB-2024-001)
+  description String?
+  type        ObraType    @default(RESIDENCIAL)
+  status      ObraStatus  @default(ORCAMENTO)
+  address     Json        // { street, number, complement, city, state, zip }
+  startDate   DateTime?
+  endDate     DateTime?
+  area        Float?      // Área em m²
+  totalBudget Float?      // Valor total orçado
+  totalCost   Float       @default(0) // Custo real acumulado
+  progress    Float       @default(0) // % de avanço físico (0-100)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relações financeiras
+  contasPagar    ContaPagar[]
+  contasReceber  ContaReceber[]
+  pagamentos     Pagamento[]
+  notasFiscais   NotaFiscal[]
+  contratos      Contrato[]
+  medicoes       Medicao[]
+  orcamentos     Orcamento[]
+  cronograma     CronogramaEtapa[]
+  estoque        MovimentacaoEstoque[]
+  rdo            Rdo[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("obras")
+}
+
+enum ObraStatus {
+  ORCAMENTO
+  APROVADA
+  EM_ANDAMENTO
+  PARALISADA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum ObraType {
+  RESIDENCIAL
+  COMERCIAL
+  INDUSTRIAL
+  INFRAESTRUTURA
+  REFORMA
+  OUTRO
+}
+
+// ============================================================
+// FINANCEIRO — CONTAS A PAGAR
+// ============================================================
+
+model ContaPagar {
+  id             String          @id @default(cuid())
+  tenantId       String
+  obraId         String
+  obra           Obra            @relation(fields: [obraId], references: [id])
+  fornecedorId   String?
+  fornecedor     Fornecedor?     @relation(fields: [fornecedorId], references: [id])
+  categoriaId    String?
+  categoria      Categoria?      @relation(fields: [categoriaId], references: [id])
+  notaFiscalId   String?
+  notaFiscal     NotaFiscal?     @relation(fields: [notaFiscalId], references: [id])
+  description    String
+  amount         Float
+  amountPaid     Float           @default(0)
+  dueDate        DateTime
+  paidAt         DateTime?
+  status         ContaStatus     @default(PENDENTE)
+  paymentMethod  String?
+  notes          String?
+  attachmentUrl  String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  parcelas Parcela[]
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@map("contas_pagar")
+}
+
+// ============================================================
+// FINANCEIRO — CONTAS A RECEBER
+// ============================================================
+
+model ContaReceber {
+  id           String       @id @default(cuid())
+  tenantId     String
+  obraId       String
+  obra         Obra         @relation(fields: [obraId], references: [id])
+  clienteId    String?
+  cliente      Cliente?     @relation(fields: [clienteId], references: [id])
+  categoriaId  String?
+  categoria    Categoria?   @relation(fields: [categoriaId], references: [id])
+  medicaoId    String?
+  medicao      Medicao?     @relation(fields: [medicaoId], references: [id])
+  description  String
+  amount       Float
+  amountPaid   Float        @default(0)
+  dueDate      DateTime
+  receivedAt   DateTime?
+  status       ContaStatus  @default(PENDENTE)
+  notes        String?
+  attachmentUrl String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@map("contas_receber")
+}
+
+enum ContaStatus {
+  PENDENTE
+  PARCIALMENTE_PAGO
+  PAGO
+  VENCIDO
+  CANCELADO
+}
+
+// ============================================================
+// PAGAMENTOS (registro de transações)
+// ============================================================
+
+model Pagamento {
+  id            String   @id @default(cuid())
+  tenantId      String
+  obraId        String
+  obra          Obra     @relation(fields: [obraId], references: [id])
+  type          PagamentoType
+  description   String
+  amount        Float
+  paidAt        DateTime
+  paymentMethod String?  // PIX, boleto, transferência, dinheiro
+  receipt       String?  // URL do comprovante
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("pagamentos")
+}
+
+enum PagamentoType {
+  SAIDA   // Pagamento a fornecedor
+  ENTRADA // Recebimento de cliente
+}
+
+// ============================================================
+// PARCELAS (para contas parceladas)
+// ============================================================
+
+model Parcela {
+  id           String     @id @default(cuid())
+  tenantId     String
+  contaPagarId String
+  contaPagar   ContaPagar @relation(fields: [contaPagarId], references: [id], onDelete: Cascade)
+  number       Int        // Número da parcela
+  amount       Float
+  dueDate      DateTime
+  paidAt       DateTime?
+  status       ContaStatus @default(PENDENTE)
+  createdAt    DateTime   @default(now())
+
+  @@index([tenantId])
+  @@map("parcelas")
+}
+
+// ============================================================
+// NOTAS FISCAIS
+// ============================================================
+
+model NotaFiscal {
+  id           String      @id @default(cuid())
+  tenantId     String
+  obraId       String
+  obra         Obra        @relation(fields: [obraId], references: [id])
+  lancadoPorId String?
+  lancadoPor   User?       @relation(fields: [lancadoPorId], references: [id])
+  fornecedorId String?
+  fornecedor   Fornecedor? @relation(fields: [fornecedorId], references: [id])
+  number       String      // Número da NF
+  series       String?
+  type         NotaType    @default(ENTRADA)
+  issueDate    DateTime
+  totalAmount  Float
+  taxAmount    Float?
+  fileUrl      String?     // PDF/XML armazenado no Supabase Storage
+  xmlData      Json?       // Dados extraídos do XML da NF-e
+  status       NotaStatus  @default(PENDENTE)
+  notes        String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  contasPagar ContaPagar[]
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("notas_fiscais")
+}
+
+enum NotaType {
+  ENTRADA
+  SAIDA
+  SERVICO
+}
+
+enum NotaStatus {
+  PENDENTE
+  VINCULADA
+  CANCELADA
+}
+
+// ============================================================
+// CONTRATOS
+// ============================================================
+
+model Contrato {
+  id           String         @id @default(cuid())
+  tenantId     String
+  obraId       String
+  obra         Obra           @relation(fields: [obraId], references: [id])
+  fornecedorId String?
+  fornecedor   Fornecedor?    @relation(fields: [fornecedorId], references: [id])
+  clienteId    String?
+  cliente      Cliente?       @relation(fields: [clienteId], references: [id])
+  type         ContratoType
+  number       String?
+  description  String
+  amount       Float
+  startDate    DateTime
+  endDate      DateTime?
+  status       ContratoStatus @default(ATIVO)
+  fileUrl      String?
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  medicoes Medicao[]
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("contratos")
+}
+
+enum ContratoType {
+  FORNECEDOR
+  CLIENTE
+  SUBEMPREITEIRO
+}
+
+enum ContratoStatus {
+  ATIVO
+  SUSPENSO
+  ENCERRADO
+  CANCELADO
+}
+
+// ============================================================
+// MEDIÇÕES
+// ============================================================
+
+model Medicao {
+  id          String       @id @default(cuid())
+  tenantId    String
+  obraId      String
+  obra        Obra         @relation(fields: [obraId], references: [id])
+  contratoId  String?
+  contrato    Contrato?    @relation(fields: [contratoId], references: [id])
+  number      Int          // Número sequencial da medição
+  period      String       // Ex: "Janeiro/2024"
+  startDate   DateTime
+  endDate     DateTime
+  amount      Float        // Valor medido
+  progress    Float        // % de avanço nesta medição
+  status      MedicaoStatus @default(PENDENTE)
+  notes       String?
+  approvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  contasReceber ContaReceber[]
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("medicoes")
+}
+
+enum MedicaoStatus {
+  PENDENTE
+  APROVADA
+  FATURADA
+  PAGA
+  REJEITADA
+}
+
+// ============================================================
+// ORÇAMENTO DE OBRA
+// ============================================================
+
+model Orcamento {
+  id        String          @id @default(cuid())
+  tenantId  String
+  obraId    String
+  obra      Obra            @relation(fields: [obraId], references: [id])
+  version   Int             @default(1)
+  name      String
+  bdi       Float           @default(0)  // % BDI
+  total     Float           @default(0)
+  status    OrcamentoStatus @default(RASCUNHO)
+  approvedAt DateTime?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  itens OrcamentoItem[]
+
+  @@index([tenantId])
+  @@map("orcamentos")
+}
+
+model OrcamentoItem {
+  id          String    @id @default(cuid())
+  orcamentoId String
+  orcamento   Orcamento @relation(fields: [orcamentoId], references: [id], onDelete: Cascade)
+  description String
+  unit        String    // m², m³, un, kg, etc.
+  quantity    Float
+  unitPrice   Float
+  total       Float
+  order       Int
+  parentId    String?   // Para hierarquia de itens
+
+  @@map("orcamento_itens")
+}
+
+enum OrcamentoStatus {
+  RASCUNHO
+  APROVADO
+  REVISAO
+  CANCELADO
+}
+
+// ============================================================
+// CRONOGRAMA FÍSICO
+// ============================================================
+
+model CronogramaEtapa {
+  id          String         @id @default(cuid())
+  tenantId    String
+  obraId      String
+  obra        Obra           @relation(fields: [obraId], references: [id])
+  name        String
+  startDate   DateTime
+  endDate     DateTime
+  progress    Float          @default(0) // % concluído
+  status      EtapaStatus    @default(PENDENTE)
+  order       Int
+  parentId    String?        // Para sub-etapas
+  color       String?        // Cor no Gantt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("cronograma_etapas")
+}
+
+enum EtapaStatus {
+  PENDENTE
+  EM_ANDAMENTO
+  CONCLUIDA
+  ATRASADA
+  PARALISADA
+}
+
+// ============================================================
+// ESTOQUE / MATERIAIS
+// ============================================================
+
+model MovimentacaoEstoque {
+  id           String          @id @default(cuid())
+  tenantId     String
+  obraId       String
+  obra         Obra            @relation(fields: [obraId], references: [id])
+  fornecedorId String?
+  fornecedor   Fornecedor?     @relation(fields: [fornecedorId], references: [id])
+  material     String
+  unit         String
+  quantity     Float
+  unitPrice    Float?
+  total        Float?
+  type         MovimentacaoType
+  date         DateTime
+  notes        String?
+  createdAt    DateTime        @default(now())
+
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("movimentacoes_estoque")
+}
+
+enum MovimentacaoType {
+  ENTRADA
+  SAIDA
+  TRANSFERENCIA
+  PERDA
+}
+
+// ============================================================
+// RDO — REGISTRO DIÁRIO DE OBRA
+// ============================================================
+
+model Rdo {
+  id          String      @id @default(cuid())
+  tenantId    String
+  obraId      String
+  obra        Obra        @relation(fields: [obraId], references: [id])
+  userId      String
+  user        User        @relation(fields: [userId], references: [id])
+  date        DateTime
+  weather     Weather     @default(BOM)
+  temperature Float?
+  workers     Int         @default(0)
+  activities  String      // Atividades realizadas no dia
+  occurrences String?     // Ocorrências e observações
+  photos      String[]    // Array de URLs das fotos
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([obraId, date])
+  @@index([tenantId])
+  @@index([tenantId, obraId])
+  @@map("rdo")
+}
+
+enum Weather {
+  BOM
+  NUBLADO
+  CHUVOSO
+  MUITO_QUENTE
+  COM_VENTO
+}
+
+// ============================================================
+// CADASTROS BASE
+// ============================================================
+
+model Cliente {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  cpfCnpj  String?
+  email     String?
+  phone     String?
+  address   Json?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  obras         Obra[]
+  contasReceber ContaReceber[]
+  contratos     Contrato[]
+
+  @@index([tenantId])
+  @@map("clientes")
+}
+
+model Fornecedor {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  cnpj      String?
+  email     String?
+  phone     String?
+  address   Json?
+  category  String?  // Tipo de serviço/material fornecido
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contasPagar  ContaPagar[]
+  notasFiscais NotaFiscal[]
+  contratos    Contrato[]
+  estoque      MovimentacaoEstoque[]
+
+  @@index([tenantId])
+  @@map("fornecedores")
+}
+
+model Categoria {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String
+  type      CategoriaType
+  color     String?
+  createdAt DateTime @default(now())
+
+  contasPagar   ContaPagar[]
+  contasReceber ContaReceber[]
+
+  @@unique([tenantId, name, type])
+  @@map("categorias")
+}
+
+enum CategoriaType {
+  DESPESA
+  RECEITA
+}
