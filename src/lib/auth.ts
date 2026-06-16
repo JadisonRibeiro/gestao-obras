@@ -1,9 +1,15 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import type { UserRole } from "@prisma/client";
 
 import { createClient } from "@/lib/supabase/server";
 import { getUserByAuthId } from "@/services/auth.service";
+
+/** Papéis que podem gerenciar dados (criar/editar/excluir). */
+export function isManagerRole(role: UserRole): boolean {
+  return role === "ADMIN" || role === "GESTOR";
+}
 
 /**
  * Retorna o usuário autenticado (com tenant e plano) ou `null`.

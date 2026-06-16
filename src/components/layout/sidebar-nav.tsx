@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, type NavItem } from "@/config/nav";
+import { NAV_SECTIONS, type NavLink } from "@/config/nav";
 
 interface SidebarNavProps {
   /** Chamado ao navegar — usado para fechar o menu mobile (Sheet). */
@@ -12,8 +12,8 @@ interface SidebarNavProps {
 }
 
 /**
- * Navegação por módulos. Reutilizada na sidebar do desktop e no
- * menu lateral (Sheet) do mobile.
+ * Navegação por módulos, agrupada em seções. Reutilizada na sidebar do
+ * desktop e no menu lateral (Sheet) do mobile.
  */
 export function SidebarNav({ onNavigate }: SidebarNavProps) {
   const pathname = usePathname();
@@ -22,28 +22,37 @@ export function SidebarNav({ onNavigate }: SidebarNavProps) {
     pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <nav className="flex flex-col gap-1 p-3" aria-label="Navegação principal">
-      {NAV_ITEMS.map((item) => (
-        <NavLink
-          key={item.href}
-          item={item}
-          active={isActive(item.href)}
-          isChildActive={isActive}
-          onNavigate={onNavigate}
-        />
+    <nav className="flex flex-col gap-5 p-3" aria-label="Navegação principal">
+      {NAV_SECTIONS.map((section, i) => (
+        <div key={section.label ?? `section-${i}`} className="flex flex-col gap-1">
+          {section.label && (
+            <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-white/35">
+              {section.label}
+            </p>
+          )}
+          {section.items.map((item) => (
+            <NavItem
+              key={item.href}
+              item={item}
+              active={isActive(item.href)}
+              isChildActive={isActive}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
       ))}
     </nav>
   );
 }
 
-interface NavLinkProps {
-  item: NavItem;
+interface NavItemProps {
+  item: NavLink;
   active: boolean;
   isChildActive: (href: string) => boolean;
   onNavigate?: () => void;
 }
 
-function NavLink({ item, active, isChildActive, onNavigate }: NavLinkProps) {
+function NavItem({ item, active, isChildActive, onNavigate }: NavItemProps) {
   const Icon = item.icon;
 
   return (
@@ -53,18 +62,19 @@ function NavLink({ item, active, isChildActive, onNavigate }: NavLinkProps) {
         onClick={onNavigate}
         aria-current={active ? "page" : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-          "text-primary-foreground/80 hover:bg-white/10 hover:text-primary-foreground",
-          active &&
-            "bg-white/15 text-primary-foreground border-l-2 border-secondary"
+          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          "text-white/70 hover:bg-white/10 hover:text-white",
+          active && "bg-white/[0.12] text-white"
         )}
       >
-        <Icon className="h-5 w-5 shrink-0" />
+        <Icon
+          className={cn("h-[18px] w-[18px] shrink-0", active && "text-secondary")}
+        />
         <span className="truncate">{item.title}</span>
       </Link>
 
       {item.children && active && (
-        <div className="ml-7 mt-1 flex flex-col gap-1 border-l border-white/15 pl-3">
+        <div className="ml-[26px] mt-1 flex flex-col gap-0.5 border-l border-white/15 pl-3">
           {item.children.map((child) => (
             <Link
               key={child.href}
@@ -73,9 +83,8 @@ function NavLink({ item, active, isChildActive, onNavigate }: NavLinkProps) {
               aria-current={isChildActive(child.href) ? "page" : undefined}
               className={cn(
                 "rounded-md px-2 py-1.5 text-sm transition-colors",
-                "text-primary-foreground/70 hover:bg-white/10 hover:text-primary-foreground",
-                isChildActive(child.href) &&
-                  "text-secondary font-medium"
+                "text-white/60 hover:bg-white/10 hover:text-white",
+                isChildActive(child.href) && "font-medium text-secondary"
               )}
             >
               {child.title}
