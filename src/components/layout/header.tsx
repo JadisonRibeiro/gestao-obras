@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Menu, Bell, LogOut, User as UserIcon, Settings } from "lucide-react";
 
+import { logout } from "@/app/(auth)/actions";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -39,6 +40,7 @@ interface HeaderProps {
 
 export function Header({ tenantName, user }: HeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isLoggingOut, startLogout] = useTransition();
 
   const initials = getInitials(user.name);
 
@@ -124,9 +126,18 @@ export function Header({ tenantName, user }: HeaderProps) {
               Configurações
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              disabled={isLoggingOut}
+              onSelect={(event) => {
+                event.preventDefault();
+                startLogout(() => {
+                  void logout();
+                });
+              }}
+            >
               <LogOut className="h-4 w-4" />
-              Sair
+              {isLoggingOut ? "Saindo..." : "Sair"}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

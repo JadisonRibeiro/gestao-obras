@@ -36,9 +36,30 @@ export const updateSession = async (request: NextRequest) => {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // TODO(fase-1): quando a página de login existir, redirecionar usuários
-  // não autenticados das rotas protegidas do dashboard para /login.
-  void user;
+  const { pathname } = request.nextUrl;
+
+  // Rotas públicas: login, cadastro e a confirmação de e-mail.
+  const isPublicPath =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/cadastro") ||
+    pathname.startsWith("/auth");
+
+  // Não autenticado tentando acessar rota protegida → login.
+  if (!user && !isPublicPath) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // Autenticado tentando acessar login/cadastro → painel.
+  if (
+    user &&
+    (pathname.startsWith("/login") || pathname.startsWith("/cadastro"))
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/painel";
+    return NextResponse.redirect(url);
+  }
 
   return supabaseResponse;
 };
