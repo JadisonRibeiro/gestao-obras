@@ -18,6 +18,7 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
   recebido: "success",
   // warning (amarelo)
   pendente: "warning",
+  parcialmente_pago: "warning",
   em_andamento: "warning",
   "em andamento": "warning",
   paralisada: "warning",
@@ -43,6 +44,7 @@ const STATUS_LABEL: Record<string, string> = {
   aprovada: "Aprovada",
   recebido: "Recebido",
   pendente: "Pendente",
+  parcialmente_pago: "Parcial",
   em_andamento: "Em andamento",
   "em andamento": "Em andamento",
   paralisada: "Paralisada",
