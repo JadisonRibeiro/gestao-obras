@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 
-import { createObraAction } from "@/app/(dashboard)/obras/actions";
+import {
+  createObraAction,
+  updateObraAction,
+} from "@/app/(dashboard)/obras/actions";
 import {
   obraSchema,
   type ObraInput,
@@ -29,7 +32,12 @@ function FieldError({ message }: { message?: string }) {
   return <p className="text-sm text-destructive">{message}</p>;
 }
 
-export function ObraForm() {
+interface ObraFormProps {
+  obraId?: string;
+  defaultValues?: Partial<ObraFormValues>;
+}
+
+export function ObraForm({ obraId, defaultValues }: ObraFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [formError, setFormError] = useState<string | null>(null);
@@ -40,15 +48,17 @@ export function ObraForm() {
     formState: { errors },
   } = useForm<ObraFormValues, unknown, ObraInput>({
     resolver: zodResolver(obraSchema),
-    defaultValues: { type: "RESIDENCIAL", status: "ORCAMENTO" },
+    defaultValues: { type: "RESIDENCIAL", status: "ORCAMENTO", ...defaultValues },
   });
 
   const onSubmit = (values: ObraInput) => {
     setFormError(null);
     startTransition(async () => {
-      const result = await createObraAction(values);
+      const result = obraId
+        ? await updateObraAction(obraId, values)
+        : await createObraAction(values);
       if (result?.error) setFormError(result.error);
-      // Sucesso: a action redireciona para /obras.
+      // Sucesso: a action redireciona.
     });
   };
 
@@ -190,7 +200,11 @@ export function ObraForm() {
 
           <div className={cn("flex items-center gap-3 pt-2")}>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Salvando..." : "Criar obra"}
+              {isPending
+                ? "Salvando..."
+                : obraId
+                  ? "Salvar alterações"
+                  : "Criar obra"}
             </Button>
             <Button
               type="button"

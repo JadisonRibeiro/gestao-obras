@@ -33,27 +33,56 @@ export async function getObra(tenantId: string, id: string) {
   return prisma.obra.findFirst({ where: { id, tenantId } });
 }
 
+function toData(input: ObraInput) {
+  const { street, number, city, state, zip, ...rest } = input;
+  return {
+    name: rest.name,
+    code: rest.code,
+    description: rest.description,
+    type: rest.type,
+    status: rest.status,
+    area: rest.area,
+    totalBudget: rest.totalBudget,
+    address: { street, number, city, state, zip },
+  };
+}
+
 /**
  * Cria uma obra após verificar o limite do plano. O endereço é gravado como
  * JSON. Lança PlanLimitError se o limite do plano tiver sido atingido.
  */
 export async function createObra(tenantId: string, input: ObraInput) {
   await assertCanCreateObra(tenantId);
+  return prisma.obra.create({ data: { tenantId, ...toData(input) } });
+}
 
-  const { street, number, city, state, zip, area, totalBudget, ...rest } =
-    input;
-
-  return prisma.obra.create({
-    data: {
-      tenantId,
-      name: rest.name,
-      code: rest.code,
-      description: rest.description,
-      type: rest.type,
-      status: rest.status,
-      area,
-      totalBudget,
-      address: { street, number, city, state, zip },
-    },
+/** Atualiza uma obra do tenant. Retorna false se não pertencer ao tenant. */
+export async function updateObra(
+  tenantId: string,
+  id: string,
+  input: ObraInput
+) {
+  const result = await prisma.obra.updateMany({
+    where: { id, tenantId },
+    data: toData(input),
   });
+  return result.count > 0;
+}
+
+/** Altera apenas o status da obra. */
+export async function updateObraStatus(
+  tenantId: string,
+  id: string,
+  status: ObraStatus
+) {
+  const result = await prisma.obra.updateMany({
+    where: { id, tenantId },
+    data: { status },
+  });
+  return result.count > 0;
+}
+
+export async function deleteObra(tenantId: string, id: string) {
+  const result = await prisma.obra.deleteMany({ where: { id, tenantId } });
+  return result.count > 0;
 }

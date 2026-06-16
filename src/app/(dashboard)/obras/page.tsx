@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Building2, Plus, MapPin } from "lucide-react";
+import { Building2, Plus } from "lucide-react";
 
 import { requireUser } from "@/lib/auth";
 import { listObras } from "@/services/obra.service";
@@ -9,18 +9,34 @@ import { OBRA_TYPE_LABELS } from "@/lib/validations/obra";
 import { formatBRL } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PageHeader } from "@/components/shared/page-header";
+import { SearchInput } from "@/components/shared/search-input";
+import { RowActions } from "@/components/shared/row-actions";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { deleteObraAction } from "./actions";
 import type { ObraType } from "@prisma/client";
 
 export const metadata: Metadata = {
   title: "Obras",
 };
 
-export default async function ObrasPage() {
+export default async function ObrasPage({
+  searchParams,
+}: {
+  searchParams: { q?: string };
+}) {
   const user = await requireUser();
+  const search = searchParams.q?.trim() || undefined;
   const [obras, usage] = await Promise.all([
-    listObras(user.tenantId),
+    listObras(user.tenantId, { search }),
     getObraUsage(user.tenantId),
   ]);
 
@@ -44,6 +60,10 @@ export default async function ObrasPage() {
         }
       />
 
+      <div className="mb-4">
+        <SearchInput placeholder="Buscar por nome ou código..." />
+      </div>
+
       {obras.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
@@ -51,63 +71,91 @@ export default async function ObrasPage() {
               <Building2 className="h-6 w-6" />
             </span>
             <div>
-              <p className="font-medium">Nenhuma obra cadastrada</p>
+              <p className="font-medium">
+                {search ? "Nenhuma obra encontrada" : "Nenhuma obra cadastrada"}
+              </p>
               <p className="text-sm text-muted-foreground">
-                Comece cadastrando a primeira obra da sua construtora.
+                {search
+                  ? "Tente outro termo de busca."
+                  : "Comece cadastrando a primeira obra."}
               </p>
             </div>
-            <Button asChild>
-              <Link href="/obras/nova">
-                <Plus className="h-4 w-4" />
-                Cadastrar obra
-              </Link>
-            </Button>
+            {!search && (
+              <Button asChild>
+                <Link href="/obras/nova">
+                  <Plus className="h-4 w-4" />
+                  Cadastrar obra
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {obras.map((obra) => {
-            const address = obra.address as {
-              city?: string;
-              state?: string;
-            } | null;
-            return (
-              <Card key={obra.id}>
-                <CardContent className="space-y-3 pt-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{obra.name}</p>
-                      {obra.code && (
-                        <p className="text-xs text-muted-foreground">
-                          {obra.code}
-                        </p>
-                      )}
-                    </div>
-                    <StatusBadge status={obra.status} />
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <MapPin className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">
-                      {address?.city
-                        ? `${address.city}${address.state ? `/${address.state}` : ""}`
-                        : "—"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between border-t pt-3 text-sm">
-                    <span className="text-muted-foreground">
-                      {OBRA_TYPE_LABELS[obra.type as ObraType]}
-                    </span>
-                    <span className="font-mono font-medium">
-                      {formatBRL(obra.totalBudget)}
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Obra</TableHead>
+                  <TableHead className="hidden md:table-cell">Tipo</TableHead>
+                  <TableHead className="hidden sm:table-cell">Cidade</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden text-right lg:table-cell">
+                    Orçado
+                  </TableHead>
+                  <TableHead className="w-12" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {obras.map((obra) => {
+                  const address = obra.address as {
+                    city?: string;
+                    state?: string;
+                  } | null;
+                  return (
+                    <TableRow key={obra.id}>
+                      <TableCell>
+                        <Link
+                          href={`/obras/${obra.id}`}
+                          className="font-medium hover:text-primary hover:underline"
+                        >
+                          {obra.name}
+                        </Link>
+                        {obra.code && (
+                          <p className="text-xs text-muted-foreground">
+                            {obra.code}
+                          </p>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
+                        {OBRA_TYPE_LABELS[obra.type as ObraType]}
+                      </TableCell>
+                      <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
+                        {address?.city
+                          ? `${address.city}${address.state ? `/${address.state}` : ""}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={obra.status} />
+                      </TableCell>
+                      <TableCell className="hidden text-right font-mono text-sm lg:table-cell">
+                        {formatBRL(obra.totalBudget)}
+                      </TableCell>
+                      <TableCell>
+                        <RowActions
+                          editHref={`/obras/${obra.id}/editar`}
+                          onDelete={deleteObraAction.bind(null, obra.id)}
+                          deleteTitle="Excluir obra"
+                          deleteDescription={`Tem certeza que deseja excluir "${obra.name}"? Esta ação não pode ser desfeita.`}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
     </>
   );
