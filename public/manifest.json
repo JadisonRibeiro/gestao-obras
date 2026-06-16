@@ -1,7 +1,7 @@
 {
-  "name": "Gestão de Obras",
-  "short_name": "Obras",
-  "description": "Sistema de gestão de obras para construtoras — financeiro, obras, notas fiscais e relatórios.",
+  "name": "ObraFlow — Gestão de Obras",
+  "short_name": "ObraFlow",
+  "description": "ERP de gestão de obras para construtoras — obras, financeiro, notas fiscais e relatórios em um só lugar.",
   "start_url": "/painel",
   "scope": "/",
   "display": "standalone",

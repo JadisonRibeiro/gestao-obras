@@ -9,10 +9,19 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const user = await requireUser();
+  const { tenant } = user;
+
+  const trialLabel =
+    tenant.subscriptionStatus === "TRIAL" && tenant.trialEndsAt
+      ? `Trial • ${Math.max(
+          0,
+          Math.ceil((tenant.trialEndsAt.getTime() - Date.now()) / 86_400_000)
+        )} dias restantes`
+      : null;
 
   return (
     <div className="min-h-screen bg-background">
-      <Sidebar />
+      <Sidebar planName={tenant.plan.name} trialLabel={trialLabel} />
       <div className="flex min-h-screen flex-col md:pl-64">
         <Header
           tenantName={user.tenant.name}

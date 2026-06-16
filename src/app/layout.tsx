@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { SITE } from "@/config/site";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const inter = Inter({
@@ -18,11 +19,10 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Gestão de Obras",
-    template: "%s | Gestão de Obras",
+    default: `${SITE.name} — ${SITE.tagline}`,
+    template: `%s | ${SITE.name}`,
   },
-  description:
-    "Sistema de gestão de obras para construtoras — financeiro, obras, notas fiscais e relatórios.",
+  description: SITE.description,
   manifest: "/manifest.json",
   icons: {
     icon: "/icons/icon-192.png",
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Gestão de Obras",
+    title: SITE.name,
   },
 };
 

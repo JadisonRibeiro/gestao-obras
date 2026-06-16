@@ -64,7 +64,7 @@ export function BottomNav() {
         </SheetTrigger>
         <SheetContent
           side="left"
-          className="w-72 border-none bg-primary p-0 text-primary-foreground"
+          className="w-72 border-none bg-[#0c1c43] p-0 text-white"
         >
           <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
           <SidebarBrand />
