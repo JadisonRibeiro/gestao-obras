@@ -23,14 +23,17 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
   em_andamento: "warning",
   "em andamento": "warning",
   paralisada: "warning",
+  suspenso: "warning",
   // destructive (vermelho)
   vencido: "destructive",
   cancelado: "destructive",
   cancelada: "destructive",
   atrasado: "destructive",
+  rejeitada: "destructive",
   // muted / neutro
   rascunho: "outline",
   orcamento: "outline",
+  encerrado: "outline",
   inativo: "outline",
   inativa: "outline",
 };
@@ -53,6 +56,9 @@ const STATUS_LABEL: Record<string, string> = {
   cancelado: "Cancelado",
   cancelada: "Cancelada",
   atrasado: "Atrasado",
+  suspenso: "Suspenso",
+  encerrado: "Encerrado",
+  rejeitada: "Rejeitada",
   rascunho: "Rascunho",
   orcamento: "Orçamento",
   inativo: "Inativo",
